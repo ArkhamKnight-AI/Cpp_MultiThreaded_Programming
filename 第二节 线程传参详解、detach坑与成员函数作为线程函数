@@ -1,0 +1,68 @@
+#include<iostream>
+#include<thread>
+using namespace std;
+
+class A {
+public:
+	int m_i; //可以修改成员变量的值
+	//类型转换构造函数 可以把int类型转换为类A对象
+	A(int a) :m_i(a) { cout << "A::A(int a)构造函数执行 " << this << " this thread = " << this_thread::get_id() << endl; }
+	A(const A& a) : m_i(a.m_i) { cout << "A::A(const A)拷贝构造函数执行 " << this << " this thread = " << this_thread::get_id() << endl; }
+	~A() { cout << "~A()析构函数执行" << " this thread = " << this_thread::get_id() << endl; }
+
+	void thread_work(int num) {
+		cout << "子线程执行 " << this << " threadid = " << std::this_thread::get_id() << endl;
+	}
+	
+	void operator()(int num) {
+		cout << "子线程执行 " << this << " threadid = " << std::this_thread::get_id() << endl;
+	}
+};
+
+//void myprint(const int& i, char* mybuf) {
+//	cout << i << endl;
+//	cout << mybuf <<  endl;
+//}
+
+//void myprint(const int i, const A& pmybuf) {
+//	cout << &pmybuf << endl;
+//}
+
+void myprint2(unique_ptr<int> pmybuf) {
+	//pmybuf.m_i = 199; //修改该值不会影响main函数
+	//cout << "子线程myprint2的参数地址 " << &pmybuf << " threadid = " << this_thread::get_id() << endl;
+}
+
+int main() { 
+	//(1)传递临时对象作为线程参数
+	//int mvar = 1;
+	//int mysecondpar = 12;
+	//char mybuf[] = "this is a test";
+	//thread mytobj(myprint2, mvar, A(mysecondpar)); //希望整型mysec ondpar转成A类型对象传递给myprint的第二个参数
+
+	//cout << "主线程id为：" << this_thread::get_id() << endl;
+	//int mvar = 1;
+	//std::thread mytobj2(myprint2, mvar); //是在子线程中创建构造出来的 有可能主线程走完了 mvar已经失效了 用失效的变量在子线程中创建
+	//std::thread mytobj2(myprint2, A(mvar));
+	//mytobj2.join();
+	//mytobj2.detach();
+	//cout << "I love China!" << endl;  
+
+	//(2)传递类对象作为线程参数
+	//A myobj(10); //生成一个对象
+	//std::thread mytobj2(myprint2, std::ref(myobj)); //myobj将类对象作为参数
+	//mytobj2.join();
+
+	//(3)传递智能指针作为线程参数
+	/*unique_ptr<int> myp(new int(100));
+	std::thread  mytobj(myprint2, std::move(myp));
+	mytobj.join();*/
+
+	//(4)用成员函数作为线程入口函数
+	A myobj(10); 
+	//std::thread mytobj(&A::thread_work, std::ref(myobj), 15);
+	std::thread mytobj(std::ref(myobj), 15);
+	mytobj.join();
+	
+	return 0;
+}
