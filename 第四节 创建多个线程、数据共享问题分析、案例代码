@@ -1,0 +1,73 @@
+#include<iostream>
+#include<thread>
+#include<vector>
+#include<list>
+#include<string>
+using namespace std;
+
+vector<int> g_v = { 1, 2, 3 }; //共享数据 只读
+
+//线程入口函数
+//void myprint(int num) {
+//	/*cout << "myprint线程开始执行了，线程编号=" << num << endl;
+//	cout << "myprint线程结束执行了，线程编号=" << num << endl;*/
+//	cout << "id为: " << std::this_thread::get_id() << "的线程 打印g_v值" << g_v[0] << g_v[1] << g_v[2] << endl;
+//}
+
+class A {
+public:
+	//把收到的消息(玩家命令)入到一个队列的线程
+	void inMsgRecvQueue() {
+		for (int i = 0; i < 100000; ++i) {
+			cout << "inMsgRecvQueue()执行，插入一个元素：" << i << endl;
+			msgRecvQueue.push_back(i); //假设i就是收到的命令 直接弄到消息队列中
+		}
+	}
+
+	//把数据从消息队列中取出的线程
+	void outMsgRecvQueue() {
+		for (int i = 0; i < 100000; ++i) {
+			if (!msgRecvQueue.empty()) {
+				//消息不为空
+				int commond = msgRecvQueue.front(); //返回第一个元素 但不检查元素是否存在
+				msgRecvQueue.pop_front(); //移除第一个元素 但不返回
+				//...处理数据
+			}
+
+			else {
+				//消息队列为空
+				cout << "outMsgRecvQueue()执行，但目前消息队列中为空" << i << endl;
+			}
+		}
+		cout << "end" << endl;
+	}
+
+
+private: 
+	std::list<int> msgRecvQueue; //容器 专门用于代表玩家送来的命令
+};
+
+int main() { 
+	//(1)创建和等待多个线程
+	//vector<thread> mythreads;
+	//
+	////创建10个线程 线程入口函数统一使用myprint
+	//for (int i = 0; i < 10; i++) {
+	//	mythreads.push_back(thread(myprint, i)); //创建10个线程，同时这10个线程已经开始执行
+	//}
+
+	//for (auto iter = mythreads.begin(); iter != mythreads.end(); iter++) {
+	//	iter->join();
+	//}
+
+	//cout << "I love China!" << endl;
+
+	A myobja;
+	std::thread myOutnMsgObj(&A::outMsgRecvQueue, &myobja); //第二个参数是引用 才能保证线程使用同一对象
+	std::thread myInMsgObj(&A::inMsgRecvQueue, &myobja);
+
+	myOutnMsgObj.join();
+	myInMsgObj.join();
+
+	return 0;
+}
