@@ -1,0 +1,97 @@
+#include<iostream>
+#include<thread>
+#include<vector>
+#include<list>
+#include<string>
+#include<mutex>
+#include<memory>
+using namespace std;
+
+vector<int> g_v = { 1, 2, 3 }; //共享数据 只读
+
+//线程入口函数
+//void myprint(int num) {
+//	/*cout << "myprint线程开始执行了，线程编号=" << num << endl;
+//	cout << "myprint线程结束执行了，线程编号=" << num << endl;*/
+//	cout << "id为: " << std::this_thread::get_id() << "的线程 打印g_v值" << g_v[0] << g_v[1] << g_v[2] << endl;
+//}
+
+class A {
+public:
+	//把收到的消息(玩家命令)入到一个队列的线程
+	void inMsgRecvQueue() {
+		for (int i = 0; i < 100000; ++i) {
+			cout << "inMsgRecvQueue()执行，插入一个元素：" << i << endl;
+			//是为了给lock_guard加一个作用域 提前解锁
+			//{
+				//std::lock_guard<std::mutex> sbguard(my_mutex1);
+			//my_mutex1.lock(); //金锁
+			//my_mutex2.lock(); //银锁	
+			std::lock(my_mutex1, my_mutex2);
+			std::lock_guard<std::mutex> sbguard1(my_mutex1, std::adopt_lock);
+			std::lock_guard<std::mutex> sbguard2(my_mutex2, std::adopt_lock);
+
+			msgRecvQueue.push_back(i); //假设i就是收到的命令 直接弄到消息队列中
+			/*my_mutex2.unlock();
+			my_mutex1.unlock();*/
+			//}
+			//my_mutex.unlock();
+			//...其他处理代码
+		}
+		return;
+	}
+
+	bool outMsgLULProc(int& commond) {
+		//std::lock_guard<std::mutex> sbguard(my_mutex1);
+		//my_mutex1.lock(); //顺序相同 不会出现死锁
+		//my_mutex2.lock();
+		std::lock(my_mutex1, my_mutex2);
+		std::lock_guard<std::mutex> sbguard1(my_mutex1, std::adopt_lock);
+		std::lock_guard<std::mutex> sbguard2(my_mutex2, std::adopt_lock);
+		if (!msgRecvQueue.empty()) {
+			//消息不为空
+			int commond = msgRecvQueue.front(); //返回第一个元素 但不检查元素是否存在
+			msgRecvQueue.pop_front(); //移除第一个元素 但不返回
+			//my_mutex1.unlock(); //这是第一个分支 要return就要unlock
+			//my_mutex2.unlock();
+			return true;
+		}
+
+		//my_mutex.unlock(); //这是第二个分支 要return就要unlock
+		//my_mutex1.unlock(); //这是第一个分支 要return就要unlock
+		//my_mutex2.unlock();
+		return false;
+	}
+
+	//把数据从消息队列中取出的线程
+	void outMsgRecvQueue() {
+		int commond = 0;
+		for (int i = 0; i < 100000; ++i) {
+			bool result = outMsgLULProc(commond);
+			if (result) cout << "outMsgRecvQueue()执行，取出一个元素：" << commond << endl;
+
+			else {
+				//消息队列为空
+				cout << "outMsgRecvQueue()执行，但目前消息队列中为空" << i << endl;
+			}
+		}
+		cout << "end" << endl;
+	}
+
+
+private: 
+	std::list<int> msgRecvQueue; //容器 专门用于代表玩家送来的命令
+	std::mutex my_mutex1;
+	std::mutex my_mutex2;
+};
+
+int main() { 
+	A myobja;
+	std::thread myOutnMsgObj(&A::outMsgRecvQueue, &myobja); //第二个参数是引用 才能保证线程使用同一对象
+	std::thread myInMsgObj(&A::inMsgRecvQueue, &myobja);
+
+	myOutnMsgObj.join();
+	myInMsgObj.join();
+
+	return 0;
+}
