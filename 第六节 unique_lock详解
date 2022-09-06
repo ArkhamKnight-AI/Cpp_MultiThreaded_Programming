@@ -1,0 +1,106 @@
+#include<iostream>
+#include<thread>
+#include<vector>
+#include<list>
+#include<string>
+#include<mutex>
+#include<memory>
+using namespace std;
+
+vector<int> g_v = { 1, 2, 3 }; //共享数据 只读
+
+class A {
+public:
+	std::unique_lock<std::mutex> rtn_unique_lock() {
+		std::unique_lock<std::mutex> tmpguard(my_mutex1);
+		return tmpguard; //从函数返回一个局部的unique_lock对象是可以的 移动构造函数3.14 
+		//生成临时对象 调用移动构造函数
+	}
+
+	//把收到的消息(玩家命令)入到一个队列的线程
+	void inMsgRecvQueue() {
+		for (int i = 0; i < 100000; ++i) {
+			cout << "inMsgRecvQueue()执行，插入一个元素：" << i << endl;
+			//my_mutex1.lock();
+			//std::unique_lock<std::mutex> sbguard1(my_mutex1, std::adopt_lock);
+			//使用try_to_lock前提是千万不能私自调用lock()方法 
+		 //	std::unique_lock<std::mutex> sbguard1(my_mutex1, std::try_to_lock); 
+			//if (sbguard1.owns_lock()) {
+			//std::unique_lock<std::mutex> sbguard1(my_mutex1, std::defer_lock); //没有加锁的my_mutex1
+			/*std::unique_lock<std::mutex> sbguard1(my_mutex1);
+			std::unique_lock<std::mutex> sbguard2(std::move(sbguard1));*/
+			std::unique_lock<std::mutex> sbguard1 = rtn_unique_lock(); //把my_mutex1的所有权转移到sbguard1上
+
+			//std::mutex *ptx = sbguard1.release();
+
+			msgRecvQueue.push_back(i);
+			//ptx->unlock();
+			//sbguard1.lock(); //不用自己unlock
+			//if (sbguard1.try_lock()) { //返回true表示拿到锁了 
+			//	msgRecvQueue.push_back(i); //假设i就是收到的命令 直接弄到消息队列中
+			//}
+			//else {
+			//	cout << "inMsgRecvQueue()执行，但没有拿到锁，只能干点别的事" << i << endl;
+			//}
+			//}
+
+			//else {
+			//	//没拿到锁 拿不到锁也可以做一些别的事情
+			//}
+
+			//my_mutex.unlock();
+			//...其他处理代码
+		}
+		return;
+	}
+
+	bool outMsgLULProc(int& commond) {
+		std::unique_lock<mutex> sbguard1(my_mutex1);
+		
+		//std::chrono::milliseconds dura(500); //1s=1000ms 20s
+		//std::this_thread::sleep_for(dura);  //休息一定时长
+
+		if (!msgRecvQueue.empty()) { 
+			//消息不为空
+			commond = msgRecvQueue.front(); //返回第一个元素 但不检查元素是否存在
+			msgRecvQueue.pop_front(); //移除第一个元素 但不返回
+			return true;
+		}
+
+		return false;
+	}
+
+	//把数据从消息队列中取出的线程
+	void outMsgRecvQueue() {
+		int commond = 0;
+		for (int i = 0; i < 100000; ++i) {
+			bool result = outMsgLULProc(commond);
+			if (result) cout << "outMsgRecvQueue()执行，取出一个元素：" << commond << endl;
+
+			else {
+				//消息队列为空
+				cout << "outMsgRecvQueue()执行，但目前消息队列中为空" << i << endl;
+			}
+		}
+		cout << "end" << endl;
+	}
+
+
+private:
+	std::list<int> msgRecvQueue; //容器 专门用于代表玩家送来的命令
+	std::mutex my_mutex1;
+	std::mutex my_mutex2;
+};
+
+int main() {
+	A myobja;
+	std::thread myOutnMsgObj(&A::outMsgRecvQueue, &myobja); //第二个参数是引用 才能保证线程使用同一对象
+	std::thread myInMsgObj(&A::inMsgRecvQueue, &myobja);
+	myOutnMsgObj.join();
+	myInMsgObj.join();
+
+	//unique_lock取代lock_guard 是一个类模板 
+	  
+
+	return 0;
+}
