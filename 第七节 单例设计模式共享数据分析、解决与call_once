@@ -1,0 +1,85 @@
+#include<iostream>
+#include<thread>
+#include<string>
+#include<mutex>
+using namespace std;
+
+std::mutex resource_mutex;
+std::once_flag g_flag; //这个是系统定义的标记
+
+class MyCAS {
+	//只被调用一次的函数
+	static void createInstance() {
+		std::chrono::milliseconds dura(2000); //休息20s
+		std::this_thread::sleep_for(dura);
+
+		cout << "CreateInstance()被执行了" << endl;
+
+		m_instance = new MyCAS();
+		static CGarHuishou cl;
+	}
+
+private:
+	MyCAS() {} //构造函数私有化
+
+private:
+	static MyCAS* m_instance; //静态成员变量
+
+public:
+	static MyCAS* GetInstance() {
+		//只有两个线程争着初始化该对象时 该条件才可能成立
+		//if (m_instance == nullptr) {
+		//	std::unique_lock<std::mutex> mymutex(resource_mutex); //自动加锁
+		//	if (m_instance == nullptr) {
+		//		m_instance = new MyCAS();
+		//		static CGarHuishou cl;
+		//	}
+		//}
+		std::call_once(g_flag, createInstance); //g_flag可以看成是一个锁
+		cout << "call_once执行完毕" << endl;
+		return m_instance;
+	}
+
+	//嵌套类
+	class CGarHuishou {
+	public: 
+		CGarHuishou() {
+			if (MyCAS::m_instance) {
+				delete m_instance;
+				m_instance = nullptr;
+			}
+		}
+	};
+
+public:
+	void func() {
+		cout << "测试" << endl;
+	}
+};
+
+//类静态变量初始化
+MyCAS* MyCAS::m_instance = nullptr;
+
+//线程入口函数
+void mythread() {
+	cout << "我的线程开始执行了" << endl;
+	MyCAS* p_a = MyCAS::GetInstance();
+	p_a->func();
+	cout << "我的线程执行完毕了" << endl;
+	return;
+}
+
+int main() {
+	//MyCAS* p_a = MyCAS::GetInstance();//创建对象 返回该类对象指针
+	//p_a->func();
+	//MyCAS::GetInstance()->func();
+
+	//面临的问题：需要在我们自己创建的线程 而不是主线程中创建MyCAS这个单例类的对象 这种线程可能不止一个
+	std::thread mytobj1(mythread);
+	std::thread mytobj2(mythread);
+
+	mytobj1.join();
+	mytobj2.join();
+
+	return 0;
+}
