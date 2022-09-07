@@ -1,0 +1,88 @@
+#include<iostream>
+#include<thread>
+#include<vector>
+#include<list>
+#include<string>
+#include<mutex>
+#include<memory>
+using namespace std;
+
+class A {
+public:
+	//把收到的消息(玩家命令)入到一个队列的线程
+	void inMsgRecvQueue() {
+		for (int i = 0; i < 100000; ++i) {
+			std::unique_lock<std::mutex> sbguard1(my_mutex1); //把my_mutex1的所有权转移到sbguard1上
+			cout << "inMsgRecvQueue()执行，插入一个元素：" << i << endl;
+			msgRecvQueue.push_back(i);
+			my_cond.notify_all(); //写入后 尝试把wait()的线程唤醒 那么outMsgRecvQueue()里面的wait()就会被唤醒
+		}
+		return;
+	}
+
+	bool outMsgLULProc(int& commond) {
+		std::unique_lock<mutex> sbguard1(my_mutex1);
+		if (!msgRecvQueue.empty()) {
+			//消息不为空
+			commond = msgRecvQueue.front(); //返回第一个元素 但不检查元素是否存在
+			msgRecvQueue.pop_front(); //移除第一个元素 但不返回
+			return true;
+		}
+
+		return false;
+	}
+
+	//把数据从消息队列中取出的线程
+	void outMsgRecvQueue() {
+		int commond = 0;
+		while (true) {
+			std::unique_lock<std::mutex> sbguard1(my_mutex1);
+
+			//wait()用来等一个东西
+			//如果第二个参数lambda表达式返回值是true 那么wait()直接返回
+			//如果第二个参数lambda表达式返回值是false 那么wait()将 (1)解锁互斥量 (2)并阻塞到本行
+			//阻塞到其他某个线程调用notify_one()成员函数为止
+			//如果wait()没有第二个参数 那么就跟第二个参数lambda表达式返回false效果一样 也就是阻塞到本行
+			//当其他线程用notify_one()将本wait(原本是睡着/阻塞)的状态唤醒后，wait就开始恢复干活了
+			//1)wait()不断尝试重新获取互斥量锁，如果获取不到，那么流程就卡在wait()这里等着获取，如果获取到，wait()就继续执行2)
+			//2)已经获取到了锁后：
+				//2.1)如果wait有第二个参数(lambda)，就判断这个lambda表达式，如果为false则wait又对互斥量解锁，继续睡眠，等待在此被notify唤醒
+				//2.2)如果lambda表达式为true，则wait返回，流程走下来(此时互斥锁被锁着)
+				//2.3)如果wait没有第二个参数，则wait返回，流程走下来(因为无条件唤醒)
+			my_cond.wait(sbguard1, [this] { //一个lambda表达式就是一个可调用对象(函数)
+				if (!msgRecvQueue.empty()) {
+					return true;
+				}
+				return false;
+			});
+
+			//流程能走到这里，互斥锁一定是锁着的
+			//一会在写其他的
+			commond = msgRecvQueue.front();
+			msgRecvQueue.pop_front(); //移除第一个元素 但不返回
+			cout << "outMsgRecvQueue()执行，取出一个元素：" << commond << " treadid = " << std::this_thread::get_id() << endl;
+			sbguard1.unlock();
+		}
+	}
+
+
+private:
+	std::list<int> msgRecvQueue; //容器 专门用于代表玩家送来的命令
+	std::mutex my_mutex1;
+	std::condition_variable my_cond; //生成一个条件变量对象
+};
+
+
+
+int main() {
+	A myobja;
+	std::thread myOutnMsgObj1(&A::outMsgRecvQueue, &myobja); //第二个参数是引用 才能保证线程使用同一对象
+	std::thread myOutnMsgObj2(&A::outMsgRecvQueue, &myobja); //第二个参数是引用 才能保证线程使用同一对象
+	std::thread myInMsgObj(&A::inMsgRecvQueue, &myobja);
+	myOutnMsgObj1.join();
+	myOutnMsgObj2.join();
+	myInMsgObj.join();
+
+
+	return 0;
+}
