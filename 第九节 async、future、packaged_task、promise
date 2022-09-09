@@ -1,0 +1,90 @@
+#include<iostream>
+#include<string>
+#include<thread>
+#include<future>
+using namespace std;
+
+class A {
+public:
+	//线程入口函数
+	//int mythread(int mypar) {
+	//	cout << mypar << endl;
+	//	cout << "mythread() start threadid = " << std::this_thread::get_id() << endl; //打印新线程id
+	//	std::chrono::milliseconds dura(5000); //休息5s
+	//	std::this_thread::sleep_for(dura);
+	//	cout << "mythread() end threadid = " << std::this_thread::get_id() << endl; //打印新线程id
+	//	return 5;
+	//}
+};
+//线程入口函数
+//int mythread(int mypar) {
+//  	cout << mypar << endl;
+//   	cout << "mythread() start threadid = " << std::this_thread::get_id() << endl; //打印新线程id
+//   	std::chrono::milliseconds dura(5000); //休息5s
+//   	std::this_thread::sleep_for(dura);
+//   	cout << "mythread() end threadid = " << std::this_thread::get_id() << endl; //打印新线程id
+//   	return 5;
+//}
+//vector<std::packaged_task<int(int)>> mytask;
+
+void mythread(std::promise<int>& temp, int calc) {
+	calc++;
+	calc *= 10;
+
+	std::chrono::milliseconds dura(5000);
+	std::this_thread::sleep_for(dura);
+
+	//计算出结果
+	int result = calc; //保存结果
+	temp.set_value(result);
+}
+
+void mythread2(std::future<int>& tmpf) {
+	auto result = tmpf.get();
+	cout << "mythread2 result = " << result << endl;
+}
+
+int main() {
+	/*A a;
+	int tmppar = 12;*/
+	//std::future<int> result = std::async(std::launch::async|std::launch::deferred, &A::mythread, &a, tmppar); //第二个参数是对象引用 才能保证线程里用的是同一个对象 
+	// cout << "main threadid = " << std::this_thread::get_id() << endl;
+	////std::packaged_task<int(int)> mypt(mythread);
+	// std::packaged_task<int(int)> mypt([](int mypar) {
+	//	 cout << mypar << endl;
+	//	 cout << "mythread() start threadid = " << std::this_thread::get_id() << endl; //打印新线程id
+	//	 std::chrono::milliseconds dura(2000); //休息5s
+	//	 std::this_thread::sleep_for(dura);
+	//	 cout << "mythread() end threadid = " << std::this_thread::get_id() << endl; //打印新线程id
+	//	 return 5; 
+	// });
+
+	// mytask.push_back(std::move(mypt)); //入容器 使用移动语义 转移资源
+	// std::packaged_task<int(int)> mypt2;
+	// auto iter = mytask.begin();
+	// mypt2 = std::move(*iter); //使用移动语义
+	// mytask.erase(iter); //删除第一个元素 迭代器失效 后续不可以使用iter
+	// mypt2(135);
+
+	//std::thread t1(std::ref(mypt), 1); //线程开始执行 第二个参数 1作为线程入口函数的参数
+	//t1.join();
+	/*std::future<int> result = mypt.get_future();
+	cout << result.get() << endl;*/
+	/*mypt(105);
+	std::future<int> result = mypt.get_future();
+	cout << result.get() << endl;*/
+
+	std::promise<int> myprom; //声明一个std::promise对象myprom
+	std::thread t1(mythread, std::ref(myprom), 180);
+	t1.join();
+
+	//获取结果值
+	std::future<int> fu1 = myprom.get_future(); //promise和future绑定 用于获取线程返回值
+	/*auto result = fu1.get();
+	cout << "result = " << result << endl;*/
+	std::thread t2(mythread2, std::ref(fu1));
+	t2.join();
+	cout << "I love China!" << endl;
+
+	return 0;
+}
