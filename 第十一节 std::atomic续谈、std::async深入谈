@@ -1,0 +1,44 @@
+#include<iostream>
+#include<string>
+#include<thread>
+#include<future>
+using namespace std;
+
+void mythread2(std::shared_future<int>& tmpf) {
+	cout << "mythread2() start, threadid = " << std::this_thread::get_id() << endl;
+	//只能get一次 多次get会报异常 因为get是一个移动语义 用shared_future解决数据共享问题
+	auto result = tmpf.get();
+	cout << "mythread2 result = " << result << endl;
+}
+
+std::mutex g_mutex;
+std::atomic<int> g_mycount = 0; //封装了一个类型为int的对象
+
+//void mythread(){
+//	for (int i = 0; i < 1000000; i++) {
+//		g_mycount += 1;
+//		g_mycount++;
+//	}
+//}
+
+int mythread() {
+	cout << "mythread() start, threadid = " << std::this_thread::get_id() << endl;
+	return 1;
+}
+
+int main() {
+	cout << "main threadid = " << std::this_thread::get_id() << endl; 
+	//std::launch::deffered
+		//1)如果主线程中没有调用wait()/get() 那么什么都不会发生
+		//1)如果主线程中调用了wait()/get() 那么不会创建新线程 而是在主线程执行
+	//std::future<int> result = std::async(std::launch::deferred, mythread);
+	//std::launch::async 一定会创建出新线程来执行线程函数
+	std::future<int> result = std::async(std::launch::async, mythread);
+	cout << result.get() << endl;  
+	/*std::thread mytobj1(mythread);
+	std::thread mytobj2(mythread);
+	mytobj1.join();
+	mytobj2.join();*/   
+
+	return 0;
+}
