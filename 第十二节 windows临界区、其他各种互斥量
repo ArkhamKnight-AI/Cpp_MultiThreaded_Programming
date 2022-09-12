@@ -1,0 +1,221 @@
+//windows临界区
+#include<iostream>
+#include<thread>
+#include<vector>
+#include<list>
+#include<string>
+#include<mutex>
+#include<memory>
+#include<future>
+#include<windows.h>
+using namespace std;
+
+#define __WINDOWSLJQ__
+
+//本类用于自动释放windows下的临界区 防止忘记LeaveCriticalSection导致死锁情况的发生，类似于C++11中的std::lock_guard<std::mutex>
+//RAAI类 Resource Acquisition is initialization "获取资源即初始化"
+class CWinLock {
+public:
+	//构造函数
+	CWinLock(CRITICAL_SECTION* pCritmp) {
+		m_pCritical = pCritmp;
+		EnterCriticalSection(m_pCritical);
+	}
+
+	//析构函数
+	~CWinLock() {
+		LeaveCriticalSection(m_pCritical);
+	}
+
+private:
+	CRITICAL_SECTION* m_pCritical;
+};
+
+class A {
+public:
+	A() {
+		//初始化临界区
+#ifdef __WINDOWSLJQ__
+		InitializeCriticalSection(&my_winsec);
+
+#endif // __WINDOWSLJQ__
+	}
+
+	//把收到的消息(玩家命令)入到一个队列的线程
+	void inMsgRecvQueue() {
+		for (int i = 0; i < 100000; ++i) {  
+			cout << "inMsgRecvQueue()执行，插入一个元素：" << i << endl;
+#ifdef __WINDOWSLJQ__
+			CWinLock wlock(&my_winsec);
+			CWinLock wlock2(&my_winsec); //多次进入临界区也不会出问题
+			//EnterCriticalSection(&my_winsec); //进入临界区 mutex.lock()
+			//EnterCriticalSection(&my_winsec); //进入临界区 mutex.lock()
+			msgRecvQueue.push_back(i); //假设i就是收到的命令 直接弄到消息队列中
+			//LeaveCriticalSection(&my_winsec); //离开临界区 mutex.unlock()
+			//LeaveCriticalSection(&my_winsec); //离开临界区 mutex.unlock()
+#else
+			std::lock_guard<std::mutex> sbguard(my_mutex);
+			msgRecvQueue.push_back(i); //假设i就是收到的命令 直接弄到消息队列中
+#endif // __WINDOWSLJQ__
+		}
+		return;
+	}
+
+	bool outMsgLULProc(int& commond) {
+#ifdef __WINDOWSLJQ__
+		EnterCriticalSection(&my_winsec);
+		if (!msgRecvQueue.empty()) {
+			commond = msgRecvQueue.front();
+			msgRecvQueue.pop_front();
+			LeaveCriticalSection(&my_winsec);
+			return true;
+		}
+		LeaveCriticalSection(&my_winsec);
+		return false;
+#else
+		std::lock_guard<std::mutex> sbguard(my_mutex);
+		//消息不为空
+		if (!msgRecvQueue.empty()) {
+			commond = msgRecvQueue.front(); //返回第一个元素 但不检查元素是否存在
+			msgRecvQueue.pop_front(); //移除第一个元素 但不返回
+			return true;
+		}
+		return false;
+#endif // __WINDOWSLJQ__
+
+		
+	}
+
+	//把数据从消息队列中取出的线程
+	void outMsgRecvQueue() {
+		int commond = 0;
+		for (int i = 0; i < 100000; ++i) {
+			bool result = outMsgLULProc(commond);
+			if (result) cout << "outMsgRecvQueue()执行，取出一个元素：" << commond << endl;
+
+			else {
+				//消息队列为空
+				cout << "outMsgRecvQueue()执行，但目前消息队列中为空" << i << endl;
+			}
+		}
+		cout << "end" << endl;
+	}
+
+private:
+	std::list<int> msgRecvQueue; //容器 专门用于代表玩家送来的命令
+	std::mutex my_mutex;
+
+#ifdef __WINDOWSLJQ__
+	CRITICAL_SECTION my_winsec;
+#endif // __WINDOWSLJQ__
+
+};
+
+int main() {
+	A myobja;
+	std::thread myOutnMsgObj(&A::outMsgRecvQueue, &myobja); //第二个参数是引用 才能保证线程使用同一对象 
+	std::thread myInMsgObj(&A::inMsgRecvQueue, &myobja);
+	myOutnMsgObj.join();
+	myInMsgObj.join();
+
+	return 0;
+}
+
+
+
+
+
+//其他mutex互斥量
+#include<iostream>
+#include<thread>
+#include<vector>
+#include<list>
+#include<string>
+#include<mutex>
+#include<memory>
+#include<future>
+#include<windows.h>
+using namespace std;
+
+class A {
+public:
+	//把收到的消息(玩家命令)入到一个队列的线程
+	void inMsgRecvQueue() {
+		for (int i = 0; i < 100000; ++i) {  
+			cout << "inMsgRecvQueue()执行，插入一个元素：" << i << endl;
+			std::chrono::milliseconds timeout(100);
+			if (my_mutex.try_lock_until(std::chrono::steady_clock::now() + timeout)) {
+				//在100ms内拿到了锁
+				msgRecvQueue.push_back(i); //假设i就是收到的命令 直接弄到消息队列中
+				my_mutex.unlock();
+			}
+			else {
+				//没拿到锁头
+				std::chrono::milliseconds sleeptime(100);
+				std::this_thread::sleep_for(sleeptime);
+			}
+			//std::lock_guard<std::recursive_mutex> sbguard(my_mutex);
+			//testfunc1(); //加了3次锁 报异常 只要lock超过1次就报异常
+			//msgRecvQueue.push_back(i); //假设i就是收到的命令 直接弄到消息队列中
+
+		}
+		return;
+	}
+
+	bool outMsgLULProc(int& commond) {
+		//std::lock_guard<std::recursive_mutex> sbguard(my_mutex);
+		//消息不为空
+		my_mutex.lock();
+		std::chrono::milliseconds sleeptime(1000000);
+		std::this_thread::sleep_for(sleeptime);
+		if (!msgRecvQueue.empty()) {
+			commond = msgRecvQueue.front(); //返回第一个元素 但不检查元素是否存在
+			msgRecvQueue.pop_front(); //移除第一个元素 但不返回
+			my_mutex.unlock();
+			return true;
+		}
+		my_mutex.unlock();
+		return false;
+	}
+
+	//把数据从消息队列中取出的线程
+	void outMsgRecvQueue() {
+		int commond = 0;
+		for (int i = 0; i < 100000; ++i) {
+			bool result = outMsgLULProc(commond);
+			if (result) cout << "outMsgRecvQueue()执行，取出一个元素：" << commond << endl;
+
+			else {
+				//消息队列为空
+				cout << "outMsgRecvQueue()执行，但目前消息队列中为空" << endl;
+			}
+		}
+		cout << "end" << endl;
+	}
+
+	//void testfunc1() {
+	//	std::lock_guard<std::recursive_mutex> sbguard(my_mutex);
+	//	//...干各种事情
+	//	testfunc2();
+	//}
+
+	//void testfunc2() {
+	//	std::lock_guard<std::recursive_mutex> sbguard(my_mutex);
+	//	//...干另外一些事情
+	//}
+
+private:
+	std::list<int> msgRecvQueue; //容器 专门用于代表玩家送来的命令
+	//std::recursive_mutex my_mutex;
+	std::timed_mutex my_mutex;
+};
+
+int main() {
+	A myobja;
+	std::thread myOutnMsgObj(&A::outMsgRecvQueue, &myobja); //第二个参数是引用 才能保证线程使用同一对象 
+	std::thread myInMsgObj(&A::inMsgRecvQueue, &myobja);
+	myOutnMsgObj.join();
+	myInMsgObj.join();
+
+	return 0;
+}
