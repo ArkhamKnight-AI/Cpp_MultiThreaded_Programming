@@ -42,3 +42,56 @@ int main() {
 
 	return 0;
 }
+
+
+
+
+//async额外参数续谈
+#include<iostream>
+#include<string>
+#include<thread>
+#include<future>
+using namespace std;
+
+int mythread() {
+	cout << "mythread() start, threadid = " << std::this_thread::get_id() << endl;
+	std::chrono::milliseconds dura(2000);
+	std::this_thread::sleep_for(dura);
+	return 1;
+}
+
+void mythread2(std::shared_future<int>& tmpf) {
+	cout << "mythread2() start, threadid = " << std::this_thread::get_id() << endl;
+	//只能get一次 多次get会报异常 因为get是一个移动语义 用shared_future解决数据共享问题
+	auto result = tmpf.get();
+	cout << "mythread2 result = " << result << endl;
+}
+
+int main() {
+	//std::future<int> result = std::async(mythread);
+	cout << "main start " << "threadid = " << std::this_thread::get_id() << endl;
+	std::future<int> result = std::async(mythread); //没有创建子线程 在主线程中执行
+
+	//std::future_status status = result.wait_for(std::chrono::seconds(0)); //等待0s
+	std::future_status status = result.wait_for(0s); //等待0s 另一种写法
+
+	//线程被延迟调用
+	if (status == std::future_status::deferred) {
+		//超时表示线程还没执行完 如果wait_for返回的状态是超时 表示此时此刻该线程未执行完
+		cout << "超时,线程还没执行完!" << endl;
+		cout << result.get() << endl;
+	}
+	else {
+		if (status == std::future_status::ready) {
+			cout << "线程成功执行完毕并返回!" << endl;
+			cout << result.get() << endl;
+		}
+
+		else if(status == std::future_status::timeout){
+			cout << "线程被延迟执行!" << endl;
+			cout << result.get() << endl;
+		}
+	}
+	cout << "main主函数执行结束!" << endl;
+	return 0;
+}
